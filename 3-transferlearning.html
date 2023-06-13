@@ -1,0 +1,163 @@
+<html>
+    <head>
+        <title>Fluffy Animal Detector: Recognizing Custom Objects in the Browser by Transfer Learning in TensorFlow.js</title>
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script>
+        <style>
+            img {
+                object-fit: cover;
+            }
+        </style>
+    </head>
+    <body>
+        <img id="image" src="" width="224" height="224" />
+        <h1 id="status">Loading...</h1>
+        <script>
+        const fluffy = [
+            "web/dalmation.jpg", // https://www.pexels.com/photo/selective-focus-photography-of-woman-holding-adult-dalmatian-dog-1852225/
+            "web/maltese.jpg", // https://www.pexels.com/photo/white-long-cot-puppy-on-lap-167085/
+            "web/pug.jpg", // https://www.pexels.com/photo/a-wrinkly-pug-sitting-in-a-wooden-table-3475680/
+            "web/pomeranians.jpg", // https://www.pexels.com/photo/photo-of-pomeranian-puppies-4065609/
+            "web/kitty.jpg", // https://www.pexels.com/photo/eyes-cat-coach-sofa-96938/
+            "web/upsidedowncat.jpg", // https://www.pexels.com/photo/silver-tabby-cat-1276553/
+            "web/babychick.jpg", // https://www.pexels.com/photo/animal-easter-chick-chicken-5145/
+            "web/chickcute.jpg", // https://www.pexels.com/photo/animal-bird-chick-cute-583677/
+            "web/beakchick.jpg", // https://www.pexels.com/photo/animal-beak-blur-chick-583675/
+            "web/easterchick.jpg", // https://www.pexels.com/photo/cute-animals-easter-chicken-5143/
+            "web/closeupchick.jpg", // https://www.pexels.com/photo/close-up-photo-of-chick-2695703/
+            "web/yellowcute.jpg", // https://www.pexels.com/photo/nature-bird-yellow-cute-55834/
+            "web/chickbaby.jpg", // https://www.pexels.com/photo/baby-chick-58906/
+        ];
+
+        const notfluffy = [
+            "web/pizzaslice.jpg", // https://www.pexels.com/photo/pizza-on-brown-wooden-board-825661/
+            "web/pizzaboard.jpg", // https://www.pexels.com/photo/pizza-on-brown-wooden-board-825661/
+            "web/squarepizza.jpg", // https://www.pexels.com/photo/pizza-with-bacon-toppings-1435900/
+            "web/pizza.jpg", // https://www.pexels.com/photo/pizza-on-plate-with-slicer-and-fork-2260200/
+            "web/salad.jpg", // https://www.pexels.com/photo/vegetable-salad-on-plate-1059905/
+            "web/salad2.jpg", // https://www.pexels.com/photo/vegetable-salad-with-wheat-bread-on-the-side-1213710/
+        ];
+
+        // Create the ultimate, combined list of images
+        const images = fluffy.concat( notfluffy );
+
+        // Newly defined Labels
+        const labels = [
+            "So Cute & Fluffy!",
+            "Not Fluffy"
+        ];
+
+        function pickImage() {
+            document.getElementById( "image" ).src = images[ Math.floor( Math.random() * images.length ) ];
+        }
+
+        function setText( text ) {
+            document.getElementById( "status" ).innerText = text;
+        }
+
+        async function predictImage() {
+            let result = tf.tidy( () => {
+                const img = tf.browser.fromPixels( document.getElementById( "image" ) ).toFloat();
+                const normalized = img.div( 127 ).sub( 1 ); // Normalize from [0,255] to [-1,1]
+                const input = normalized.reshape( [ 1, 224, 224, 3 ] );
+                return model.predict( input );
+            });
+            let prediction = await result.data();
+            result.dispose();
+            // Get the index of the highest value in the prediction
+            let id = prediction.indexOf( Math.max( ...prediction ) );
+            setText( labels[ id ] );
+        }
+
+        function createTransferModel( model ) {
+            // Create the truncated base model (remove the "top" layers, classification + bottleneck layers)
+            // const bottleneck = model.getLayer( "conv_pw_13_relu" ); // Intercepting at the convolution layer might give better results
+            const bottleneck = model.getLayer( "dropout" ); // This is the final layer before the conv_pred pre-trained classification layer
+            const baseModel = tf.model({
+                inputs: model.inputs,
+                outputs: bottleneck.output
+            });
+            // Freeze the convolutional base
+            for( const layer of baseModel.layers ) {
+                layer.trainable = false;
+            }
+            // Add a classification head
+            const newHead = tf.sequential();
+            newHead.add( tf.layers.flatten( {
+                inputShape: baseModel.outputs[ 0 ].shape.slice( 1 )
+            } ) );
+            newHead.add( tf.layers.dense( { units: 100, activation: 'relu' } ) );
+            newHead.add( tf.layers.dense( { units: 100, activation: 'relu' } ) );
+            newHead.add( tf.layers.dense( { units: 10, activation: 'relu' } ) );
+            newHead.add( tf.layers.dense( {
+                units: 2,
+                kernelInitializer: 'varianceScaling',
+                useBias: false,
+                activation: 'softmax'
+            } ) );
+            // Build the new model
+            const newOutput = newHead.apply( baseModel.outputs[ 0 ] );
+            const newModel = tf.model( { inputs: baseModel.inputs, outputs: newOutput } );
+            return newModel;
+        }
+
+        async function getTrainingImage( url ) {
+            return new Promise( ( resolve, reject ) => {
+                document.getElementById( "image" ).src = url;
+                document.getElementById( "image" ).onload = () => {
+                    const img = tf.browser.fromPixels( document.getElementById( "image" ) ).toFloat();
+                    const normalized = img.div( 127 ).sub( 1 );
+                    resolve( normalized );
+                };
+            });
+        }
+
+        async function trainModel() {
+            setText( "Training..." );
+            
+            // Setup training data
+            const imageSamples = [];
+            const targetSamples = [];
+            for( let i = 0; i < fluffy.length / 2; i++ ) {
+                let result = await getTrainingImage( fluffy[ i ] );
+                imageSamples.push( result );
+                targetSamples.push( tf.tensor1d( [ 1, 0 ] ) );
+            }
+            for( let i = 0; i < notfluffy.length / 2; i++ ) {
+                let result = await getTrainingImage( notfluffy[ i ] );
+                imageSamples.push( result );
+                targetSamples.push( tf.tensor1d( [ 0, 1 ] ) );
+            }
+            const xs = tf.stack( imageSamples );
+            const ys = tf.stack( targetSamples );
+            tf.dispose( [ imageSamples, targetSamples ] );
+
+            model.compile( { loss: "meanSquaredError", optimizer: "adam", metrics: [ "acc" ] } );
+
+            // Train the model on new image samples
+            await model.fit( xs, ys, {
+                epochs: 30,
+                shuffle: true,
+                callbacks: {
+                    onEpochEnd: ( epoch, logs ) => {
+                        console.log( "Epoch #", epoch, logs );
+                    }
+                }
+            });
+        }
+
+        // Mobilenet v1 0.25 224x224 model
+        const mobilenet = "https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json";
+
+        let model = null;
+
+        (async () => {
+            // Load the model
+            model = await tf.loadLayersModel( mobilenet );
+            model = createTransferModel( model );
+            await trainModel();
+            setInterval( pickImage, 2000 );
+            document.getElementById( "image" ).onload = predictImage;
+        })();
+        </script>
+    </body>
+</html>

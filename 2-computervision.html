@@ -1,0 +1,66 @@
+<html>
+    <head>
+        <title>Dogs and Pizza: Computer Vision in the Browser with TensorFlow.js</title>
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script>
+        <style>
+            img {
+                object-fit: cover;
+            }
+        </style>
+        <script src="web/labels.js"></script>
+    </head>
+    <body>
+        <img id="image" src="" width="224" height="224" />
+        <h1 id="status">Loading...</h1>
+        <script>
+        const images = [
+            "web/dalmation.jpg", // https://www.pexels.com/photo/selective-focus-photography-of-woman-holding-adult-dalmatian-dog-1852225/
+            "web/maltese.jpg", // https://www.pexels.com/photo/white-long-cot-puppy-on-lap-167085/
+            "web/pug.jpg", // https://www.pexels.com/photo/a-wrinkly-pug-sitting-in-a-wooden-table-3475680/
+            "web/pomeranians.jpg", // https://www.pexels.com/photo/photo-of-pomeranian-puppies-4065609/
+            "web/pizzaslice.jpg", // https://www.pexels.com/photo/pizza-on-brown-wooden-board-825661/
+            "web/pizzaboard.jpg", // https://www.pexels.com/photo/pizza-on-brown-wooden-board-825661/
+            "web/squarepizza.jpg", // https://www.pexels.com/photo/pizza-with-bacon-toppings-1435900/
+            "web/pizza.jpg", // https://www.pexels.com/photo/pizza-on-plate-with-slicer-and-fork-2260200/
+            "web/salad.jpg", // https://www.pexels.com/photo/vegetable-salad-on-plate-1059905/
+            "web/salad2.jpg", // https://www.pexels.com/photo/vegetable-salad-with-wheat-bread-on-the-side-1213710/
+            "web/kitty.jpg", // https://www.pexels.com/photo/eyes-cat-coach-sofa-96938/
+            "web/upsidedowncat.jpg", // https://www.pexels.com/photo/silver-tabby-cat-1276553/
+        ];
+
+        function pickImage() {
+            document.getElementById( "image" ).src = images[ Math.floor( Math.random() * images.length ) ];
+        }
+
+        function setText( text ) {
+            document.getElementById( "status" ).innerText = text;
+        }
+
+        async function predictImage() {
+            let result = tf.tidy( () => {
+                const img = tf.browser.fromPixels( document.getElementById( "image" ) ).toFloat();
+                const normalized = img.div( 127 ).sub( 1 ); // Normalize from [0,255] to [-1,1]
+                const input = normalized.reshape( [ 1, 224, 224, 3 ] );
+                return model.predict( input );
+            });
+            let prediction = await result.data();
+            result.dispose();
+            // Get the index of the highest value in the prediction
+            let id = prediction.indexOf( Math.max( ...prediction ) );
+            setText( labels[ id ] );
+        }
+
+        // Mobilenet v1 0.25 224x224 model
+        const mobilenet = "https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json";
+
+        let model = null;
+
+        (async () => {
+            // Load the model
+            model = await tf.loadLayersModel( mobilenet );
+            setInterval( pickImage, 5000 );
+            document.getElementById( "image" ).onload = predictImage;
+        })();
+        </script>
+    </body>
+</html>

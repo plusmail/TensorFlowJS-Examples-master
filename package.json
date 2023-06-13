@@ -1,0 +1,39 @@
+{
+  "name": "tensorflowjs-examples",
+  "version": "1.0.0",
+  "description": "Examples for Deep Learning in a Web Browser using TensorFlow.js",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/instafluff/TensorFlowJS-Examples.git"
+  },
+  "keywords": [
+    "Instafluff",
+    "TensorFlow",
+    "Deep",
+    "Learning",
+    "AI",
+    "Neural",
+    "Network",
+    "TFJS",
+    "TensorFlowJS",
+    "JavaScript",
+    "Web",
+    "Browser",
+    "GPU",
+    "Learning",
+    "Training"
+  ],
+  "author": "Instafluff",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/instafluff/TensorFlowJS-Examples/issues"
+  },
+  "homepage": "https://github.com/instafluff/TensorFlowJS-Examples#readme",
+  "dependencies": {
+    "webwebweb": "^1.4.0"
+  }
+}
